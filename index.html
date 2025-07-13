@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebAR FrameALIVE 應用程式</title>
+    <!-- 載入 A-Frame 函式庫 - 用於建立 3D/AR 場景 -->
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <!-- 載入 AR.js 函式庫 - 用於 WebAR 功能，包括圖像追蹤 -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        /* 確保頁面沒有邊距，並隱藏溢出 */
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: "Inter", sans-serif; /* 設定字體 */
+            background-color: #000; /* 黑色背景 */
+        }
+        /* 訊息框樣式 */
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7); /* 半透明黑色背景 */
+            color: white;
+            padding: 12px 25px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            z-index: 1000; /* 確保在最上層 */
+            display: none; /* 預設隱藏 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* 陰影效果 */
+            transition: background-color 0.3s ease; /* 背景顏色過渡效果 */
+            max-width: 90%; /* 限制最大寬度 */
+        }
+        /* 新增的按鈕樣式 */
+        .gemini-button {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50; /* 綠色背景 */
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001; /* 確保在訊息框之上 */
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4); /* 更明顯的陰影 */
+            transition: all 0.3s ease; /* 平滑過渡效果 */
+            display: none; /* 預設隱藏 */
+            white-space: nowrap; /* 防止文字換行 */
+        }
+        .gemini-button:hover {
+            background-color: #45a049; /* 懸停時顏色變深 */
+            transform: translateX(-50%) scale(1.05); /* 輕微放大效果 */
+        }
+        .gemini-button:active {
+            transform: translateX(-50%) scale(0.98); /* 點擊時輕微縮小 */
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4); /* 點擊時陰影變小 */
+        }
+    </style>
+</head>
+<body>
+    <!-- 訊息框，用於顯示操作提示或狀態 -->
+    <div id="messageBox" class="message-box"></div>
+
+    <!-- 新增的 Gemini API 觸發按鈕 -->
+    <button id="geminiFactButton" class="gemini-button">✨ 獲取影片趣聞 ✨</button>
+
+    <!-- A-Frame 場景容器 -->
+    <a-scene embedded arjs='sourceType: webcam; detectionMode: image; imageTrackingEnabled: true;'>
+
+      <!-- 圖像目標定義：
+           src - 指向您的參考圖片 URL。這裡使用 AR.js 官方的 "Hiro" 圖片作為範例。
+                 您需要將此圖片列印出來或在另一個螢幕上顯示。
+           name - 給這個圖像目標一個名稱，方便在 JavaScript 中識別。
+      -->
+      <a-image-target preset="custom" type="image" src="https://raw.githubusercontent.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/assets/hiro-image.png" name="myReferenceImage">
+        <!-- 影片元素：
+             src - 指向要播放的影片 URL。
+             width, height - 影片在 AR 場景中的尺寸 (單位為公尺)。
+                           這裡設定為 1.6x0.9，以符合 16:9 的長寬比。
+             position - 影片相對於圖像目標的位置 (x, y, z)。這裡設定為 0 0 0，表示與圖片中心對齊。
+             rotation - 影片的旋轉角度 (x, y, z)。-90 0 0 通常用於將平面內容正確地放置在水平表面上。
+             id - 影片元素的唯一 ID，用於 JavaScript 存取。
+             visible - 預設隱藏影片，直到圖片被偵測到。
+             autoplay="false" - 預設不自動播放，由 JavaScript 控制。
+             loop="true" - 影片循環播放。
+             muted="true" - 預設靜音，這是瀏覽器自動播放政策的要求。
+        -->
+        <a-video src="https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4"
+                 width="1.6" height="0.9" position="0 0 0" rotation="-90 0 0"
+                 id="arVideo" visible="false"
+                 autoplay="false" loop="true" muted="true"></a-video>
+      </a-image-target>
+
+      <!-- 靜態相機，由 AR.js 控制其位置和方向 -->
+      <a-camera-static preset="natural"></a-camera-static>
+    </a-scene>
+
+    <script>
+      // MARK: - 獲取 DOM 元素
+      const arVideo = document.getElementById('arVideo'); // 影片 A-Frame 元素
+      const imageTarget = document.querySelector('a-image-target'); // 圖像目標 A-Frame 元素
+      const messageBox = document.getElementById('messageBox'); // 訊息框 DOM 元素
+      const geminiFactButton = document.getElementById('geminiFactButton'); // Gemini 趣聞按鈕
+
+      // MARK: - 輔助函數：顯示訊息
+      /**
+       * 顯示一個臨時訊息框。
+       * @param {string} message - 要顯示的文字訊息。
+       * @param {string} type - 訊息類型 ('success', 'error', 'info')，用於設定樣式。
+       * @param {number} duration - 訊息顯示的持續時間 (毫秒)，預設 3000ms。
+       */
+      function showMessage(message, type = 'info', duration = 3000) {
+          messageBox.textContent = message; // 設定訊息文字
+          messageBox.style.display = 'block'; // 顯示訊息框
+
+          // 根據類型設定訊息框的背景顏色
+          if (type === 'error') {
+              messageBox.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+          } else if (type === 'success') {
+              messageBox.style.backgroundColor = 'rgba(0, 128, 0, 0.7)';
+          } else {
+              messageBox.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+          }
+          
+          // 訊息顯示指定時間後自動隱藏
+          clearTimeout(messageBox.hideTimeout); // 清除之前的計時器
+          messageBox.hideTimeout = setTimeout(() => {
+              messageBox.style.display = 'none';
+          }, duration);
+      }
+
+      // MARK: - 事件監聽：圖像目標被偵測到
+      // 當 AR.js 偵測到參考圖片時，觸發 'targetFound' 事件
+      imageTarget.addEventListener('targetFound', function () {
+        console.log('Target Found!');
+        arVideo.setAttribute('visible', true); // 讓影片可見
+
+        // 存取 A-Frame 影片紋理底層的 HTML <video> 元素並播放
+        if (arVideo.components.material && arVideo.components.material.material.map && arVideo.components.material.material.map.image) {
+            arVideo.components.material.material.map.image.play();
+        }
+        showMessage('圖片已識別！正在播放影片...', 'success'); // 顯示成功訊息
+        geminiFactButton.style.display = 'block'; // 顯示 Gemini 按鈕
+      });
+
+      // MARK: - 事件監聽：圖像目標失去追蹤
+      // 當 AR.js 失去對參考圖片的追蹤時，觸發 'targetLost' 事件
+      imageTarget.addEventListener('targetLost', function () {
+        console.log('Target Lost!');
+        arVideo.setAttribute('visible', false); // 隱藏影片
+
+        // 暫停影片並將播放時間重置為 0
+        if (arVideo.components.material && arVideo.components.material.material.map && arVideo.components.material.material.map.image) {
+            arVideo.components.material.material.map.image.pause();
+            arVideo.components.material.material.map.image.currentTime = 0;
+        }
+        showMessage('圖片失去追蹤，影片已暫停。', 'info'); // 顯示提示訊息
+        geminiFactButton.style.display = 'none'; // 隱藏 Gemini 按鈕
+      });
+
+      // MARK: - 事件監聽：Gemini 趣聞按鈕點擊
+      geminiFactButton.addEventListener('click', async function() {
+          showMessage('正在生成影片趣聞...', 'info', 60000); // 顯示載入訊息，延長顯示時間
+
+          // 這裡我們假設影片內容是關於「自然風景」
+          // 在實際應用中，您可以根據識別到的圖片或影片的 ID 從後端獲取更精確的描述
+          const videoTopic = "自然風景"; 
+          const prompt = `請提供一個關於「${videoTopic}」的有趣事實或冷知識，約 50 字以內。`;
+
+          let chatHistory = [];
+          chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+          const payload = { contents: chatHistory };
+          const apiKey = ""; // Canvas 會在運行時自動提供 API key
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+          try {
+              const response = await fetch(apiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+              });
+
+              const result = await response.json();
+
+              if (result.candidates && result.candidates.length > 0 &&
+                  result.candidates[0].content && result.candidates[0].content.parts &&
+                  result.candidates[0].content.parts.length > 0) {
+                  const funFact = result.candidates[0].content.parts[0].text;
+                  showMessage(`✨ 趣聞：${funFact}`, 'success', 8000); // 顯示生成的趣聞，顯示時間更長
+              } else {
+                  showMessage('無法生成趣聞，請稍後再試。', 'error');
+                  console.error('Gemini API response structure unexpected:', result);
+              }
+          } catch (error) {
+              showMessage('生成趣聞時發生錯誤。', 'error');
+              console.error('Error calling Gemini API:', error);
+          }
+      });
+
+      // MARK: - 初始訊息
+      // 網頁載入完成後顯示初始提示訊息
+      window.onload = function() {
+        showMessage('請允許相機權限，並將相機對準參考圖片。', 'info');
+      };
+    </script>
+</body>
+</html>
